@@ -1,5 +1,5 @@
 // HızlıOku: keeps the app and its reading libraries on the device so it opens without internet
-const CACHE = 'hizlioku-v11';
+const CACHE = 'hizlioku-v12';
 const LOCAL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './apple-touch-icon.png'];
 const REMOTE = [
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
