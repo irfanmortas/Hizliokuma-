@@ -1,0 +1,1294 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16191F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HızlıOku">
+<meta name="description" content="Kelime kelime hızlı okuma, kütüphane ve sesli okuma.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>Hızlı Okuma Stüdyosu</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* Layout: one reading stage centred on a fixation line, controls in a quiet dock below, document context beside it */
+:root{
+  --bg:#EEF0F3; --surface:#FFFFFF; --ink:#16191F; --muted:#636B78; --line:#D5DAE1;
+  --accent:#B3124E; --accent-soft:#F6DCE6; --guide:#C5CBD4;
+  --f-read:"Literata",Georgia,"Times New Roman",serif;
+  --f-ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  --word:clamp(34px,7vw,64px);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#101318; --surface:#181C23; --ink:#E8EBF0; --muted:#8E97A5; --line:#2A303A;
+  --accent:#FF5C8F; --accent-soft:#3A1A27; --guide:#353C48; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101318; --surface:#181C23; --ink:#E8EBF0; --muted:#8E97A5; --line:#2A303A;
+  --accent:#FF5C8F; --accent-soft:#3A1A27; --guide:#353C48; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:baseline;gap:10px;min-width:0}
+.brand h1{font-family:var(--f-read);font-weight:600;font-size:22px;margin:0;letter-spacing:-.01em}
+.brand h1 b{color:var(--accent);font-weight:600}
+.doc-title{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:46ch}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+button,.btn{font:500 14px var(--f-ui);color:var(--ink);background:var(--surface);border:1px solid var(--line);
+  border-radius:8px;padding:8px 13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+button:hover,.btn:hover{border-color:var(--muted)}
+button:focus-visible,.btn:focus-within,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn input{position:absolute;width:1px;height:1px;opacity:0}
+.btn{position:relative}
+
+.main{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px}
+@media (max-width:900px){.main{grid-template-columns:minmax(0,1fr)}}
+
+.stage{background:var(--surface);border:1px solid var(--line);border-radius:14px;position:relative;
+  min-height:300px;display:flex;flex-direction:column;justify-content:center;cursor:pointer;user-select:none;overflow:hidden}
+.reticle{position:relative;padding:56px 12px}
+.reticle::before,.reticle::after{content:"";position:absolute;left:0;right:0;height:1px;background:var(--guide)}
+.reticle::before{top:34px}.reticle::after{bottom:34px}
+.tick{position:absolute;left:50%;width:2px;height:12px;background:var(--accent);transform:translateX(-1px);opacity:.75}
+.tick.t{top:34px}.tick.b{bottom:34px;transform:translate(-1px,0)}
+.word{font-family:var(--f-word,var(--f-read))!important;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:baseline;font-family:var(--f-read);font-size:var(--word);
+  line-height:1.15;white-space:pre;min-height:1.2em}
+.word .l{text-align:right}
+.word .p{color:var(--accent);font-weight:600}
+.word .r{text-align:left}
+.stage-hint{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-size:12px;color:var(--muted)}
+.stage-meta{position:absolute;top:10px;left:14px;right:14px;display:flex;justify-content:space-between;
+  font:500 12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.focus-mode .stage{position:fixed;inset:0;z-index:50;border-radius:0;border:0;
+  padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)}
+.focus-mode{--word:clamp(40px,9vw,96px)}
+
+.progress{position:relative;height:22px;cursor:pointer;margin-top:4px}
+.progress .track{position:absolute;top:9px;left:0;right:0;height:4px;border-radius:2px;background:var(--line)}
+.progress .fill{position:absolute;top:9px;left:0;height:4px;border-radius:2px;background:var(--accent);width:0}
+.progress .knob{position:absolute;top:4px;width:14px;height:14px;border-radius:50%;background:var(--accent);transform:translateX(-7px);left:0;box-shadow:0 0 0 3px var(--surface)}
+
+.dock{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:14px}
+.transport{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.transport .play{min-width:110px;justify-content:center}
+.stats{margin-left:auto;display:flex;gap:16px;font:500 13px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums;flex-wrap:wrap}
+.stats b{color:var(--ink);font-weight:500}
+.speed{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px}
+.speed .val{font:500 28px var(--f-mono);font-variant-numeric:tabular-nums;min-width:4ch;text-align:right}
+.speed .val small{font-size:12px;color:var(--muted);margin-left:4px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.presets button{padding:4px 10px;font:500 13px var(--f-mono)}
+.presets button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px 18px;font-size:13px}
+.opt{display:flex;flex-direction:column;gap:4px;min-width:0}
+.opt label{color:var(--muted);font-size:12px;letter-spacing:.04em;text-transform:uppercase}
+.opt select{font:14px var(--f-ui);padding:6px 8px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.check input{accent-color:var(--accent);width:16px;height:16px}
+
+aside{background:var(--surface);border:1px solid var(--line);border-radius:14px;display:flex;flex-direction:column;min-height:0;max-height:640px}
+aside h2{margin:0;padding:12px 16px;font:600 12px var(--f-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);display:flex;justify-content:space-between}
+.context{padding:14px 16px;overflow-y:auto;font-family:var(--f-read);font-size:15px;line-height:1.75;min-height:0;flex:1}
+.context span{cursor:pointer;border-radius:3px}
+.context span:hover{background:var(--accent-soft)}
+.context .cur{background:var(--accent);color:#fff}
+.context .para{display:block;height:.7em}
+.context .gap{color:var(--muted);font-family:var(--f-ui);font-size:12px}
+@media (max-width:900px){aside{max-height:420px}}
+.tabs{display:flex;border-bottom:1px solid var(--line)}
+.tabs button{flex:1;border:0;border-radius:0;background:transparent;padding:11px 8px;font:600 12px var(--f-ui);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);justify-content:center;border-bottom:2px solid transparent}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+.pane{display:flex;flex-direction:column;min-height:0;flex:1}
+.pages{overflow-y:auto;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:12px;align-content:start;flex:1;min-height:0}
+.pg{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:5px;border-radius:8px;padding:5px}
+.pg:focus-visible{outline:2px solid var(--accent)}
+.pg:hover .sheet{border-color:var(--muted)}
+.sheet{position:relative;aspect-ratio:1/1.414;max-width:100%;background:#fff;border:1px solid var(--line);border-radius:4px;overflow:hidden;
+  font:6.5px/1.45 var(--f-read);color:#2a2f37;padding:8px;text-align:left}
+.sheet canvas{position:absolute;inset:0;width:100%;height:100%}
+.sheet .bar{position:absolute;left:0;bottom:0;height:3px;background:var(--accent);opacity:.8}
+.pg .cap{display:flex;justify-content:space-between;font:500 11px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.pg.cur .sheet{border:2px solid var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.pg.cur .cap{color:var(--accent)}
+.pg.done .sheet{opacity:.62}
+.goto{display:flex;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.goto input{width:64px;font:500 14px var(--f-mono);padding:6px 8px;border-radius:7px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.goto button{padding:6px 11px;font-size:13px}
+
+.drop{position:fixed;inset:0;z-index:80;background:color-mix(in srgb,var(--bg) 88%,transparent);display:flex;align-items:center;justify-content:center;
+  font:600 20px var(--f-ui);color:var(--accent);border:3px dashed var(--accent);margin:12px;border-radius:16px}
+.modal{position:fixed;inset:0;z-index:90;background:rgba(10,12,16,.55);display:flex;align-items:center;justify-content:center;
+  padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.modal .box{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;width:min(720px,100%);display:flex;flex-direction:column;gap:12px}
+.modal h3{margin:0;font-family:var(--f-read);font-size:19px}
+.modal textarea{width:100%;min-height:260px;resize:vertical;font:15px/1.55 var(--f-read);padding:12px;border-radius:9px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.row{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);
+  padding:9px 16px;border-radius:9px;font-size:14px;z-index:95;max-width:calc(100% - 32px)}
+.keys{font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;gap:6px 14px}
+kbd{font:500 11px var(--f-mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--ink);background:var(--bg)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------- phone & touch ---------- */
+button,.btn,.stage,.progress,.pg{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.stage{touch-action:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.fbar{position:absolute;left:0;right:0;bottom:0;display:none;align-items:center;gap:8px;flex-wrap:wrap;justify-content:center;
+  padding:12px max(16px,env(safe-area-inset-right,0px)) calc(14px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.fbar .v{font:500 16px var(--f-mono);min-width:7ch;text-align:center;font-variant-numeric:tabular-nums}
+.fbar button{min-width:52px;justify-content:center}
+.fclose{position:absolute;top:calc(10px + env(safe-area-inset-top,0px));right:max(12px,env(safe-area-inset-right,0px));display:none}
+.focus-mode .fbar{display:flex}
+.focus-mode .fclose{display:inline-flex}
+.focus-mode .stage-meta{top:calc(16px + env(safe-area-inset-top,0px));right:90px}
+.focus-mode .stage-hint{bottom:calc(84px + env(safe-area-inset-bottom,0px))}
+.touch-only{display:none}
+@media (hover:none),(pointer:coarse){
+  .keys{display:none}
+  .touch-only{display:inline}
+  .mouse-only{display:none}
+  button,.btn{min-height:44px}
+  .opt select,.goto input,.modal textarea,.goto button{font-size:16px}
+  .presets button{min-height:38px;padding:4px 12px}
+  .progress{height:32px}.progress .track,.progress .fill{top:14px}.progress .knob{top:8px;width:18px;height:18px;transform:translateX(-9px)}
+}
+@media (max-width:640px){
+  body{padding-block:12px 28px;font-size:16px}
+  .brand h1{font-size:20px}
+  .doc-title{max-width:22ch}
+  header .actions{width:100%}
+  header .actions>*{flex:1 1 0;justify-content:center;padding-inline:8px}
+  .stage{min-height:230px}
+  .reticle{padding:50px 4px}
+  .transport{gap:6px}
+  .transport .play{order:-1;flex:1 1 100%;font-size:16px;min-height:50px}
+  .transport>button:not(.play){flex:1 1 0;padding-inline:4px;font-size:13px}
+  .stats{margin-left:0;width:100%;justify-content:space-between}
+  .speed .val{font-size:22px}
+  .opts{grid-template-columns:1fr 1fr}
+  .opts .opt:last-child{grid-column:1/-1}
+  .pages{grid-template-columns:repeat(auto-fill,minmax(96px,1fr))}
+}
+
+/* ---------- read aloud ---------- */
+.audio-row{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;padding:10px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
+.audio-row.on{border-color:var(--accent);background:var(--accent-soft)}
+.audio-row select{font:14px var(--f-ui);padding:6px 8px;border-radius:7px;border:1px solid var(--line);background:var(--surface);color:var(--ink);min-width:0;max-width:100%}
+.audio-row #voice{flex:1 1 200px}
+.audio-row .note{flex:1 1 100%;font-size:12px;color:var(--muted)}
+.speed.dim,.presets.dim{opacity:.4}
+@media (hover:none),(pointer:coarse){.audio-row select{font-size:16px}}
+
+/* ---------- library ---------- */
+.lib-err{border:1px solid var(--accent);background:var(--accent-soft);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+.lib-err pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 var(--f-mono);color:var(--ink);max-height:220px;overflow:auto}
+.ver{margin:0;font:11px var(--f-mono);color:var(--muted);text-align:center}
+.views{display:inline-flex;border:1px solid var(--line);border-radius:10px;padding:3px;background:var(--surface);gap:2px}
+.views button{border:0;background:transparent;padding:6px 14px;min-height:0;border-radius:7px}
+.views button[aria-pressed="true"]{background:var(--accent-soft)}
+.views .n{font:500 12px var(--f-mono);color:var(--muted)}
+.lib{display:flex;flex-direction:column;gap:20px}
+.lib-head{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between}
+.lib-head h2{margin:0;font:600 26px/1.2 var(--f-read);letter-spacing:-.01em}
+.lib-head p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.lib-tools{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lib-tools input[type=search],.lib-tools select{font:15px var(--f-ui);padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);min-width:0}
+.lib-tools input[type=search]{width:230px}
+.shelf{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:26px 20px}
+.book{display:flex;flex-direction:column;gap:8px;min-width:0}
+.cover{all:unset;box-sizing:border-box;cursor:pointer;position:relative;aspect-ratio:2/3;width:100%;max-width:100%;border-radius:3px 8px 8px 3px;overflow:hidden;display:flex;
+  box-shadow:0 1px 2px rgba(0,0,0,.14),0 8px 18px -8px rgba(0,0,0,.35)}
+.cover:hover{transform:translateY(-2px)}
+.cover{transition:transform .15s}
+.cover img{width:100%;height:100%;object-fit:cover;display:block}
+.cover::after{content:"";position:absolute;left:5px;top:0;bottom:0;width:2px;background:rgba(255,255,255,.22)}
+.gen{flex:1;display:flex;flex-direction:column;justify-content:space-between;padding:16px 12px 12px 18px;color:#fff;background:linear-gradient(160deg,hsl(var(--h) 42% 36%),hsl(var(--h) 46% 22%))}
+.gen b{font:600 17px/1.25 var(--f-read);text-wrap:balance;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:6;-webkit-box-orient:vertical;overflow:hidden}
+.gen span{font-size:11px;opacity:.85;letter-spacing:.05em;text-transform:uppercase;overflow-wrap:anywhere}
+.badge{position:absolute;top:8px;right:8px;background:var(--accent);color:#fff;font:600 11px var(--f-ui);padding:2px 8px;border-radius:999px;z-index:1}
+.cover:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.book.reading .cover{box-shadow:0 0 0 3px var(--accent),0 8px 18px -8px rgba(0,0,0,.35)}
+.binfo{display:flex;flex-direction:column;gap:2px;min-width:0}
+.binfo b{font:600 14px/1.3 var(--f-ui);overflow-wrap:anywhere}
+.binfo .au{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.bprog{height:3px;background:var(--line);border-radius:2px;overflow:hidden}
+.bprog i{display:block;height:100%;background:var(--accent)}
+.bmeta{display:flex;justify-content:space-between;align-items:center;font:500 11px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums;gap:6px}
+button.bdel{all:unset;cursor:pointer;color:var(--muted);font:500 12px var(--f-ui);padding:4px 0}
+button.bdel:hover,button.bdel:focus-visible{color:var(--accent)}
+button.bdel.confirm{color:var(--accent);font-weight:600}
+.lib-empty{border:1.5px dashed var(--line);border-radius:14px;padding:44px 20px;text-align:center;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:12px}
+.lib-empty h3{margin:0;color:var(--ink);font:600 21px var(--f-read)}
+.lib-empty p{margin:0;max-width:52ch}
+@media (max-width:640px){
+  .shelf{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px 14px}
+  .lib-tools{width:100%}
+  .lib-tools input[type=search]{flex:1 1 100%;width:auto}
+  .lib-tools>*{flex:1 1 auto}
+  .views{width:100%}.views button{flex:1;justify-content:center}
+}
+</style>
+
+<div class="wrap" id="app">
+  <header>
+    <div class="brand">
+      <h1>Hızlı<b>Oku</b></h1>
+      <span class="doc-title" id="docTitle">Örnek metin</span>
+    </div>
+    <nav class="views" aria-label="Görünüm">
+      <button type="button" id="vReader" aria-pressed="true">Okuyucu</button>
+      <button type="button" id="vLib" aria-pressed="false">Kütüphane <span class="n" id="libCount"></span></button>
+    </nav>
+    <div class="actions" id="readerActions">
+      <label class="btn" for="fileIn">Belge aç
+        <input type="file" id="fileIn" accept=".epub,application/epub+zip,.txt,.md,.pdf,.docx,.html,.htm,.rtf,.csv,.srt,application/pdf,text/plain,text/html,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+      </label>
+      <button id="pasteBtn" type="button">Metin yapıştır</button>
+      <button id="focusBtn" type="button" title="Odak modu (F)">Odak modu</button>
+    </div>
+  </header>
+
+  <div class="main" id="readerView">
+    <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+      <section class="stage" id="stage" aria-label="Okuma alanı">
+        <div class="stage-meta"><span id="metaLeft">0 / 0</span><span id="metaRight">%0</span></div>
+        <div class="reticle">
+          <i class="tick t"></i><i class="tick b"></i>
+          <div class="word" id="word" aria-live="off"><span class="l"></span><span class="p"></span><span class="r"></span></div>
+        </div>
+        <div class="stage-hint" id="hint">Başlatmak için tıkla veya boşluk tuşuna bas</div>
+        <button type="button" class="fclose" id="fclose" aria-label="Odak modundan çık">✕ Kapat</button>
+        <div class="fbar" id="fbar">
+          <button type="button" data-a="back" aria-label="Önceki cümle">⏮</button>
+          <button type="button" data-a="slow" aria-label="Yavaşlat">−</button>
+          <span class="v" id="fWpm">350 k/dk</span>
+          <button type="button" data-a="fast" aria-label="Hızlandır">+</button>
+          <button type="button" data-a="next" aria-label="Sonraki cümle">⏭</button>
+        </div>
+      </section>
+
+      <div class="dock">
+        <div class="progress" id="progress" title="Konuma atla">
+          <div class="track"></div><div class="fill" id="fill"></div><div class="knob" id="knob"></div>
+        </div>
+        <div class="transport">
+          <button type="button" id="backSent" title="Önceki cümle (Shift+←)">⏮ Cümle</button>
+          <button type="button" id="back10" title="10 kelime geri (←)">−10</button>
+          <button type="button" class="primary play" id="playBtn">▶ Başlat</button>
+          <button type="button" id="fwd10" title="10 kelime ileri (→)">+10</button>
+          <button type="button" id="fwdSent" title="Sonraki cümle (Shift+→)">Cümle ⏭</button>
+          <div class="stats">
+            <span>Kalan <b id="remain">0:00</b></span>
+            <span>Bu oturum <b id="sessionWords">0</b> kelime</span>
+          </div>
+        </div>
+        <div class="speed">
+          <span style="font-size:12px;color:var(--muted);letter-spacing:.04em;text-transform:uppercase">Hız</span>
+          <input type="range" id="wpm" min="100" max="1200" step="10" value="350" aria-label="Okuma hızı, dakikada kelime">
+          <span class="val"><span id="wpmVal">350</span><small>k/dk</small></span>
+        </div>
+        <div class="presets" id="presets"></div>
+        <div class="audio-row" id="audioRow">
+          <label class="check"><input type="checkbox" id="audioOn"> <b>Sesli oku</b></label>
+          <select id="voice" aria-label="Okuyan ses" hidden></select>
+          <select id="rate" aria-label="Konuşma hızı" hidden>
+            <option value="0.75">0,75×</option><option value="1">1×</option><option value="1.25">1,25×</option><option value="1.5">1,5×</option>
+            <option value="1.75">1,75×</option><option value="2">2×</option><option value="2.5">2,5×</option><option value="3">3×</option>
+          </select>
+          <span class="note" id="audioNote" hidden></span>
+        </div>
+        <div class="opts">
+          <div class="opt"><label for="chunk">Aynı anda</label>
+            <select id="chunk"><option value="1">1 kelime</option><option value="2">2 kelime</option><option value="3">3 kelime</option></select></div>
+          <div class="opt"><label for="size">Yazı boyutu</label>
+            <select id="size"><option value="s">Küçük</option><option value="m" selected>Orta</option><option value="l">Büyük</option><option value="xl">Çok büyük</option></select></div>
+          <div class="opt"><label for="font">Yazı tipi</label>
+            <select id="font">
+              <option value="Literata">Literata (kitap)</option>
+              <option value="Merriweather">Merriweather (kitap)</option>
+              <option value="Lora">Lora (kitap)</option>
+              <option value="Source Serif 4">Source Serif (kitap)</option>
+              <option value="Lexend">Lexend (hızlı okuma için)</option>
+              <option value="Atkinson Hyperlegible">Atkinson (en okunaklı)</option>
+              <option value="Open Sans">Open Sans (sade)</option>
+              <option value="Roboto Mono">Roboto Mono (eşit genişlik)</option>
+              <option value="system">Cihazın yazı tipi</option>
+            </select></div>
+          <div class="opt"><label for="weight">Kalınlık</label>
+            <select id="weight"><option value="400">Normal</option><option value="600">Kalın</option></select></div>
+          <div class="opt"><label for="pivot">Odak harfi</label>
+            <select id="pivot"><option value="color">Sadece renkli</option><option value="bold">Renkli ve kalın</option><option value="none">Vurgusuz</option></select></div>
+          <div class="opt"><label for="theme">Tema</label>
+            <select id="theme"><option value="">Sistem</option><option value="light">Açık</option><option value="dark">Koyu</option></select></div>
+          <div class="opt" style="justify-content:flex-end;gap:6px">
+            <label class="check"><input type="checkbox" id="smartPause" checked> Noktalamada duraksa</label>
+            <label class="check"><input type="checkbox" id="rampUp" checked> Yumuşak başlangıç</label>
+            <label class="check"><input type="checkbox" id="autoSpeed"> Her dakika +10 k/dk</label>
+            <label class="check"><input type="checkbox" id="holdMode"> Basılı tutarken oku</label>
+          </div>
+        </div>
+        <div class="keys">
+          <span><kbd>Boşluk</kbd> başlat/durdur</span><span><kbd>←</kbd><kbd>→</kbd> 10 kelime</span>
+          <span><kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> cümle</span><span><kbd>↑</kbd><kbd>↓</kbd> hız ±25</span>
+          <span><kbd>F</kbd> odak modu</span><span><kbd>R</kbd> başa dön</span>
+        </div>
+      </div>
+    </div>
+
+    <aside>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" id="tabPages" aria-selected="true">Sayfalar</button>
+        <button type="button" role="tab" id="tabText" aria-selected="false">Metin</button>
+      </div>
+      <div class="pane" id="panePages">
+        <div class="pages" id="pages"></div>
+        <form class="goto" id="gotoForm">
+          <label for="gotoIn">Sayfa</label>
+          <input type="number" id="gotoIn" min="1" value="1" inputmode="numeric">
+          <span id="pageTotal">/ 1</span>
+          <button type="submit" class="primary" style="margin-left:auto">Buradan başla</button>
+        </form>
+      </div>
+      <div class="pane" id="paneText" hidden>
+        <div class="context" id="context"></div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="lib" id="libraryView" hidden aria-label="Kütüphane">
+    <div class="lib-head">
+      <div><h2>Kütüphanem</h2><p id="libSummary">Kitaplar bu cihazda saklanır.</p></div>
+      <div class="lib-tools">
+        <input type="search" id="libSearch" placeholder="Kitap veya yazar ara" aria-label="Kitap veya yazar ara">
+        <select id="libSort" aria-label="Sıralama">
+          <option value="recent">Son okunan</option><option value="added">Son eklenen</option>
+          <option value="title">Ada göre</option><option value="author">Yazara göre</option><option value="progress">İlerlemeye göre</option>
+        </select>
+        <label class="btn" for="libIn" style="background:var(--accent);border-color:var(--accent);color:#fff">Kitap ekle
+          <input type="file" id="libIn" multiple accept=".epub,application/epub+zip,.pdf,application/pdf,.docx,.txt,text/plain,.md,.html,.htm,.rtf">
+        </label>
+      </div>
+    </div>
+    <div class="lib-err" id="libErr" hidden>
+      <b>Bazı dosyalar eklenemedi</b>
+      <pre id="libErrText"></pre>
+      <div class="row" style="justify-content:flex-start"><button type="button" id="copyErr">Ayrıntıyı kopyala</button><button type="button" id="closeErr">Kapat</button></div>
+    </div>
+    <div class="shelf" id="shelf"></div>
+    <p class="ver" id="ver"></p>
+    <div class="lib-empty" id="libEmpty" hidden>
+      <h3>Kütüphanen henüz boş</h3>
+      <p>Bilgisayarındaki veya telefonundaki EPUB, PDF, Word ve metin dosyalarını ekle. Birden fazla dosyayı aynı anda seçebilir ya da buraya sürükleyip bırakabilirsin. Her kitap kaldığın yeri ayrı ayrı hatırlar.</p>
+      <label class="btn" for="libIn">Dosya seç</label>
+    </div>
+  </section>
+</div>
+
+<div class="drop" id="drop" hidden>Kitapları buraya bırak</div>
+<div class="modal" id="modal" hidden>
+  <div class="box">
+    <h3>Metni yapıştır</h3>
+    <textarea id="pasteArea" placeholder="Okumak istediğin metni buraya yapıştır…"></textarea>
+    <div class="row"><button type="button" id="cancelPaste">Vazgeç</button><button type="button" class="primary" id="okPaste">Okumaya başla</button></div>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+const SAMPLE = `Hızlı okuma, gözün satır üzerinde gezinmesini ortadan kaldırarak çalışır. Normal okurken gözümüz kelimeden kelimeye sıçrar, geri döner ve her sıçramada zaman kaybeder. Bu ekranda ise kelimeler sırayla aynı noktada belirir; göz yerinde kalır, yalnızca zihin çalışır.
+
+Her kelimede renkli gösterilen harf odak noktasıdır. Bu harf her zaman ekranın ortasındaki çizgiye hizalanır. Böylece göz her yeni kelimede kendini yeniden konumlandırmak zorunda kalmaz.
+
+Başlangıçta dakikada 300 ile 350 kelime arası rahat bir hızdır. Birkaç gün düzenli çalıştıktan sonra 450 ve 500 kelimeye çıkmak çoğu kişi için mümkündür. Anlamadığın bir yer olursa sol ok tuşuyla geri dön ya da sağdaki metinde ilgili kelimeye tıkla.
+
+Kendi belgeni açmak için üstteki Belge aç düğmesini kullan. PDF, Word, metin ve HTML dosyaları desteklenir. Dosyayı sayfanın üzerine sürükleyip bırakabilirsin de. Kaldığın yer bu tarayıcıda saklanır; sayfayı kapatıp açtığında okumaya devam edebilirsin.`;
+
+const $ = id => document.getElementById(id);
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+
+let tokens = [];      // {w, para (ends paragraph), sent (ends sentence)}
+let idx = 0, playing = false, timer = null, playedCount = 0, sessionWords = 0, docKey = 'sample', speedClock = 0;
+const settings = Object.assign({wpm:350, chunk:1, size:'m', theme:'', smartPause:true, rampUp:true, autoSpeed:false, holdMode:false, font:'Literata', weight:'400', pivot:'color', audio:false, voice:'', rate:1.25}, store.get('ho.settings', {}));
+
+/* ---------- text processing ---------- */
+let pageStarts = [0], realPages = false, currentPdf = null, curPage = -1;
+const VIRTUAL_PAGE = 300;
+function tokenize(text){
+  const out = [];
+  const src = text.replace(/\r/g,'');
+  const rawPages = src.split('\f');
+  realPages = rawPages.length > 1;
+  pageStarts = [];
+  for (const pageText of rawPages){
+    pageStarts.push(out.length);
+    tokenizeInto(pageText, out);
+    if (out.length) out[out.length-1].para = true;
+  }
+  if (!realPages){ pageStarts = []; for (let i=0;i<Math.max(1,out.length);i+=VIRTUAL_PAGE) pageStarts.push(i); }
+  return out;
+}
+function pageOf(i){ let lo=0, hi=pageStarts.length-1; while(lo<hi){ const m=(lo+hi+1)>>1; if (pageStarts[m] <= i) lo=m; else hi=m-1; } return lo; }
+function tokenizeInto(text, out){
+  const paras = text.split(/\n[ \t]*\n+/);
+  for (const p of paras){
+    const words = p.replace(/\s+/g,' ').trim().split(' ').filter(Boolean);
+    if (!words.length) continue;
+    // split very long tokens (URLs, hyphen chains)
+    const pieces = [];
+    for (const w of words){
+      pieces.push(w);
+    }
+    pieces.forEach((w,i) => out.push({ w, para: i === pieces.length-1, sent: /[.!?…:;]["'”’»)\]]*$/.test(w) }));
+  }
+}
+/* rejoin words split across lines: "bo-\nşalan" -> "boşalan" (hyphen, soft hyphen, ¬) */
+const HYPH_BREAK = /(\p{L})[-\u00ad\u2010\u2011¬][ \t]*\n[ \t]*(\p{Ll})/gu;
+function joinLines(lines){
+  let res = '';
+  for (const raw of lines){
+    const l = raw.replace(/\s+/g,' ').trim();
+    if (!l) continue;
+    if (!res){ res = l; continue; }
+    if (/\p{L}[-\u00ad\u2010\u2011¬]$/u.test(res) && /^\p{Ll}/u.test(l)) res = res.slice(0,-1) + l;   // hyphenated word
+    else if (/[.!?…:]["'”’»)\]]*$/.test(res)) res += '\n\n' + l;                                    // sentence ends at line end
+    else res += ' ' + l;
+  }
+  return res;
+}
+function hashStr(s){ let h = 2166136261; for (let i=0;i<s.length;i+=Math.max(1,Math.floor(s.length/4000))) { h ^= s.charCodeAt(i); h = Math.imul(h,16777619); } return (h>>>0).toString(36)+'_'+s.length; }
+
+function orp(word){
+  const core = word.replace(/^[^\p{L}\p{N}]+/u,'');
+  const lead = word.length - core.length;
+  const n = core.replace(/[^\p{L}\p{N}]+$/u,'').length;
+  let i = n<=1?0 : n<=5?1 : n<=9?2 : n<=13?3 : 4;
+  return Math.min(word.length-1, lead + i);
+}
+
+/* ---------- rendering ---------- */
+const wordEl = $('word'), L = wordEl.children[0], P = wordEl.children[1], R = wordEl.children[2];
+/* shrink the word only when it is too wide, so every letter stays on screen */
+const meas = document.createElement('canvas').getContext('2d');
+function fitWord(){
+  wordEl.style.fontSize = '';
+  const cs = getComputedStyle(wordEl), size = parseFloat(cs.fontSize), fam = cs.fontFamily;
+  meas.font = `${settings.weight} ${size}px ${fam}`;
+  const need = Math.max(meas.measureText(L.textContent).width, meas.measureText(R.textContent).width);
+  meas.font = `${pivotWeight()} ${size}px ${fam}`;
+  const half = (wordEl.clientWidth - meas.measureText(P.textContent).width) / 2 - 6;
+  if (need > half && half > 0) wordEl.style.fontSize = Math.floor(size * half / need) + 'px';
+}
+addEventListener('resize', () => { if (tokens.length) show(idx); });
+try{ document.fonts.ready.then(() => { if (tokens.length) show(idx); }); }catch(e){}
+function chunkAt(i){ const n = settings.chunk; return tokens.slice(i, Math.min(tokens.length, i+n)); }
+function show(i){
+  if (!tokens.length){ L.textContent=''; P.textContent=''; R.textContent=''; return; }
+  const parts = chunkAt(i);
+  let text, pivot;
+  if (parts.length === 1){ text = parts[0].w; pivot = orp(text); }
+  else {
+    // pivot on the longest word of the chunk, so the eye lands where most letters are
+    let best = 0; parts.forEach((t,k)=>{ if (t.w.length > parts[best].w.length) best = k; });
+    const before = parts.slice(0,best).map(t=>t.w).join(' ');
+    text = parts.map(t=>t.w).join(' ');
+    pivot = (before ? before.length+1 : 0) + orp(parts[best].w);
+  }
+  L.textContent = text.slice(0,pivot); P.textContent = text[pivot] || ''; R.textContent = text.slice(pivot+1);
+  fitWord();
+  updateMeta();
+}
+function updateMeta(){
+  const n = tokens.length, pct = n ? Math.round(idx / Math.max(1,n-1) * 100) : 0;
+  $('metaLeft').textContent = `${Math.min(idx+1,n).toLocaleString('tr-TR')} / ${n.toLocaleString('tr-TR')}`;
+  $('metaRight').textContent = `%${pct}`;
+  const f = n>1 ? idx/(n-1)*100 : 0;
+  $('fill').style.width = f+'%'; $('knob').style.left = f+'%';
+  const secs = (typeof audioActive === 'function' && settings.audio && window.speechSynthesis) ? Math.max(0, n-idx) / (165 * settings.rate) * 60 : Math.max(0, n-idx) / settings.wpm * 60 * (settings.smartPause ? 1.12 : 1);
+  const h = Math.floor(secs/3600), m = Math.floor(secs%3600/60), s = Math.floor(secs%60);
+  $('remain').textContent = h ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
+  $('sessionWords').textContent = sessionWords.toLocaleString('tr-TR');
+  const pg = pageOf(idx);
+  $('metaLeft').textContent = `Sayfa ${pg+1}/${pageStarts.length} · ${Math.min(idx+1,n).toLocaleString('tr-TR')} / ${n.toLocaleString('tr-TR')}`;
+  if (pg !== curPage) markPage(pg);
+}
+
+/* ---------- pages panel ---------- */
+const pagesEl = $('pages');
+let thumbObserver = null;
+function renderPages(){
+  if (thumbObserver) thumbObserver.disconnect();
+  curPage = -1;
+  const frag = document.createDocumentFragment();
+  pageStarts.forEach((start, p) => {
+    const end = p+1 < pageStarts.length ? pageStarts[p+1] : tokens.length;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'pg'; b.dataset.p = p;
+    b.setAttribute('aria-label', `Sayfa ${p+1}, buradan başla`);
+    const sheet = document.createElement('div'); sheet.className = 'sheet';
+    if (!currentPdf) sheet.textContent = tokens.slice(start, Math.min(end, start+170)).map(t=>t.w).join(' ');
+    const bar = document.createElement('div'); bar.className = 'bar'; bar.style.width = '0';
+    sheet.appendChild(bar);
+    const cap = document.createElement('div'); cap.className = 'cap';
+    cap.innerHTML = `<span>${p+1}</span><span>${(end-start).toLocaleString('tr-TR')} k</span>`;
+    b.append(sheet, cap);
+    frag.appendChild(b);
+  });
+  pagesEl.replaceChildren(frag);
+  $('gotoIn').max = pageStarts.length; $('pageTotal').textContent = `/ ${pageStarts.length}`;
+  if (currentPdf){
+    thumbObserver = new IntersectionObserver(entries => {
+      entries.forEach(en => { if (en.isIntersecting){ thumbObserver.unobserve(en.target); drawThumb(en.target); } });
+    }, {root: pagesEl, rootMargin: '300px'});
+    pagesEl.querySelectorAll('.pg').forEach(el => thumbObserver.observe(el));
+  }
+}
+async function drawThumb(el){
+  const pdf = currentPdf; if (!pdf) return;
+  try{
+    const page = await pdf.getPage(+el.dataset.p + 1);
+    const vp1 = page.getViewport({scale:1});
+    const scale = 260 / vp1.width;
+    const vp = page.getViewport({scale});
+    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+    await page.render({canvasContext: c.getContext('2d'), viewport: vp}).promise;
+    if (pdf !== currentPdf) return;
+    const sheet = el.querySelector('.sheet');
+    sheet.style.aspectRatio = `${vp1.width}/${vp1.height}`;
+    sheet.insertBefore(c, sheet.firstChild);
+  }catch(e){}
+}
+function markPage(pg){
+  curPage = pg;
+  const items = pagesEl.children;
+  for (let p=0;p<items.length;p++){
+    const el = items[p];
+    el.classList.toggle('cur', p === pg);
+    el.classList.toggle('done', p < pg);
+    const bar = el.querySelector('.bar');
+    if (bar) bar.style.width = p < pg ? '100%' : '0';
+  }
+  const cur = items[pg];
+  if (cur){
+    $('gotoIn').value = pg+1;
+    const top = cur.offsetTop - pagesEl.scrollTop;
+    if (top < 0 || top > pagesEl.clientHeight - 60) pagesEl.scrollTop = cur.offsetTop - 12;
+  }
+  updatePageBar();
+}
+function updatePageBar(){
+  const pg = curPage, el = pagesEl.children[pg]; if (!el) return;
+  const start = pageStarts[pg], end = pg+1 < pageStarts.length ? pageStarts[pg+1] : tokens.length;
+  el.querySelector('.bar').style.width = Math.round((idx-start)/Math.max(1,end-start)*100) + '%';
+}
+function startPage(p){
+  p = Math.max(0, Math.min(pageStarts.length-1, p));
+  jump(pageStarts[p]);
+  toast(`Sayfa ${p+1}'den başlıyor`);
+  if (!playing) play();
+}
+pagesEl.addEventListener('click', e => { const b = e.target.closest('.pg'); if (b) startPage(+b.dataset.p); });
+$('gotoForm').addEventListener('submit', e => { e.preventDefault(); startPage((+$('gotoIn').value || 1) - 1); });
+function selectTab(which){
+  const pages = which === 'pages';
+  $('tabPages').setAttribute('aria-selected', pages); $('tabText').setAttribute('aria-selected', !pages);
+  $('panePages').hidden = !pages; $('paneText').hidden = pages;
+  if (pages){ curPage = -1; updateMeta(); } else renderContext();
+}
+$('tabPages').onclick = () => selectTab('pages');
+$('tabText').onclick = () => selectTab('text');
+
+/* context panel: a window around the current word */
+const ctx = $('context');
+function renderContext(){
+  if (!tokens.length){ ctx.innerHTML = '<span class="gap">Henüz metin yok.</span>'; return; }
+  const from = Math.max(0, idx-120), to = Math.min(tokens.length, idx+260);
+  const frag = document.createDocumentFragment();
+  if (from > 0){ const g = document.createElement('div'); g.className='gap'; g.textContent = `… önceki ${from.toLocaleString('tr-TR')} kelime`; frag.appendChild(g); }
+  const curEnd = idx + settings.chunk;
+  for (let i=from;i<to;i++){
+    const s = document.createElement('span'); s.textContent = tokens[i].w; s.dataset.i = i;
+    if (i>=idx && i<curEnd) s.className='cur';
+    frag.appendChild(s); frag.appendChild(document.createTextNode(' '));
+    if (tokens[i].para && i<to-1){ const b = document.createElement('span'); b.className='para'; b.removeAttribute('data-i'); frag.appendChild(b); }
+  }
+  if (to < tokens.length){ const g = document.createElement('div'); g.className='gap'; g.textContent = `… kalan ${(tokens.length-to).toLocaleString('tr-TR')} kelime`; frag.appendChild(g); }
+  ctx.replaceChildren(frag);
+  const cur = ctx.querySelector('.cur');
+  if (cur) ctx.scrollTop = cur.offsetTop - ctx.clientHeight/3;
+}
+let ctxTick = 0;
+function lightContext(){
+  // cheap update while playing: move highlight without rebuilding, rebuild when out of window
+  const prev = ctx.querySelectorAll('.cur'); prev.forEach(e=>e.classList.remove('cur'));
+  let found = false;
+  for (let k=0;k<settings.chunk;k++){ const e = ctx.querySelector(`[data-i="${idx+k}"]`); if (e){ e.classList.add('cur'); found = true; if(k===0){ const top = e.offsetTop - ctx.scrollTop; if (top > ctx.clientHeight*0.7 || top < 0) ctx.scrollTop = e.offsetTop - ctx.clientHeight/3; } } }
+  if (!found) renderContext();
+}
+
+/* ---------- playback ---------- */
+function delayFor(i){
+  const base = 60000 / settings.wpm * settings.chunk;
+  const parts = chunkAt(i), last = parts[parts.length-1];
+  let m = 1;
+  const longest = Math.max(...parts.map(t=>t.w.length));
+  if (longest > 8) m += Math.min(0.6, (longest-8)*0.06);
+  if (settings.smartPause){
+    if (last.para) m += 1.6;
+    else if (/[.!?…]["'”’»)\]]*$/.test(last.w)) m += 1.1;
+    else if (/[,;:—–]["'”’»)\]]*$/.test(last.w)) m += 0.45;
+    if (/\d/.test(last.w)) m += 0.3;
+  }
+  if (settings.rampUp && playedCount < 6) m *= 1 + (6-playedCount)*0.18;
+  return base * m;
+}
+function step(){
+  if (!playing) return;
+  show(idx);
+  if (!$('paneText').hidden) lightContext();
+  if (++ctxTick % 8 === 0) updatePageBar();
+  const d = delayFor(idx);
+  timer = setTimeout(() => {
+    sessionWords += settings.chunk; playedCount++;
+    if (settings.autoSpeed){ speedClock += d; if (speedClock >= 60000){ speedClock = 0; setWpm(Math.min(1200, settings.wpm+10)); toast(`Hız ${settings.wpm} k/dk`); } }
+    if (idx + settings.chunk >= tokens.length){ idx = tokens.length-1; pause(); toast('Metnin sonuna geldin'); savePos(); return; }
+    idx += settings.chunk;
+    if (playedCount % 40 === 0) savePos();
+    step();
+  }, d);
+}
+function play(){
+  if (!tokens.length || playing) return;
+  if (idx >= tokens.length-1) idx = 0;
+  playing = true; playedCount = 0;
+  $('playBtn').textContent = '❚❚ Durdur'; $('hint').hidden = true;
+  requestWake();
+  if (audioActive()) speakFrom(idx); else step();
+}
+function pause(){
+  playing = false; clearTimeout(timer);
+  stopSpeech();
+  $('playBtn').textContent = '▶ Devam'; $('hint').hidden = false; $('hint').textContent = settings.holdMode ? 'Okumak için ekrana basılı tut' : idleHint(true);
+  releaseWake(); savePos(); renderContext(); updateMeta();
+}
+function toggle(){ playing ? pause() : play(); }
+function jump(i){
+  idx = Math.max(0, Math.min(tokens.length-1, i));
+  playedCount = 0; show(idx);
+  if (playing){ clearTimeout(timer); if (audioActive()){ stopSpeech(); speakFrom(idx); } else step(); } else renderContext();
+  savePos();
+}
+function sentenceStart(i){ let k = i-1; while (k > 0 && !tokens[k-1].sent && !tokens[k-1].para) k--; return Math.max(0,k); }
+function prevSentence(){
+  let k = idx; if (k>0) k--; // step into previous token
+  let s = k; while (s > 0 && !tokens[s-1].sent && !tokens[s-1].para) s--;
+  if (s >= idx - 2 && s > 0){ s--; while (s > 0 && !tokens[s-1].sent && !tokens[s-1].para) s--; }
+  jump(s);
+}
+function nextSentence(){ let k = idx; while (k < tokens.length-1 && !tokens[k].sent && !tokens[k].para) k++; jump(k+1); }
+
+/* wake lock keeps the screen on while reading */
+let wake = null;
+async function requestWake(){ try{ if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); }catch(e){} }
+function releaseWake(){ try{ wake && wake.release(); }catch(e){} wake = null; }
+
+/* ---------- settings ---------- */
+const PRESETS = [200, 300, 400, 500, 650, 800, 1000];
+const presetsEl = $('presets');
+PRESETS.forEach(v => { const b = document.createElement('button'); b.type='button'; b.textContent = v; b.onclick = () => setWpm(v); presetsEl.appendChild(b); });
+function setWpm(v){
+  settings.wpm = Math.max(100, Math.min(1200, Math.round(v/5)*5));
+  $('wpm').value = settings.wpm; $('wpmVal').textContent = settings.wpm; $('fWpm').textContent = settings.wpm + ' k/dk';
+  [...presetsEl.children].forEach(b => b.classList.toggle('on', +b.textContent === settings.wpm));
+  saveSettings(); updateMeta();
+}
+function applySize(){ const m = {s:'clamp(26px,5vw,44px)', m:'clamp(34px,7vw,64px)', l:'clamp(42px,9vw,84px)', xl:'clamp(50px,11vw,110px)'}; document.documentElement.style.setProperty('--word', m[settings.size]); }
+function applyTheme(){ if (settings.theme) document.documentElement.setAttribute('data-theme', settings.theme); else document.documentElement.removeAttribute('data-theme'); }
+function saveSettings(){ store.set('ho.settings', settings); }
+
+$('wpm').addEventListener('input', e => setWpm(+e.target.value));
+$('chunk').value = settings.chunk; $('chunk').onchange = e => { settings.chunk = +e.target.value; saveSettings(); show(idx); renderContext(); updateMeta(); };
+$('size').value = settings.size; $('size').onchange = e => { settings.size = e.target.value; applySize(); saveSettings(); };
+const FONT_URL = {
+  'Merriweather':'Merriweather:wght@400;700', 'Lora':'Lora:wght@400;600;700', 'Source Serif 4':'Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700',
+  'Lexend':'Lexend:wght@400;600;700', 'Atkinson Hyperlegible':'Atkinson+Hyperlegible:wght@400;700', 'Open Sans':'Open+Sans:wght@400;600;700', 'Roboto Mono':'Roboto+Mono:wght@400;600;700',
+  'Literata':'Literata:opsz,wght@7..72,400;7..72,600;7..72,700'
+};
+const loadedFonts = new Set();
+function pivotWeight(){ return settings.pivot === 'bold' ? (settings.weight === '600' ? '700' : '600') : settings.weight; }
+function applyFont(){
+  const f = settings.font;
+  const stack = f === 'system' ? 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif'
+    : `"${f}",${f === 'Roboto Mono' ? 'ui-monospace,monospace' : /Lexend|Atkinson|Open Sans/.test(f) ? 'system-ui,sans-serif' : 'Georgia,serif'}`;
+  document.documentElement.style.setProperty('--f-word', stack);
+  wordEl.style.fontWeight = settings.weight;
+  P.style.fontWeight = pivotWeight();
+  P.style.color = settings.pivot === 'none' ? 'inherit' : '';
+  if (FONT_URL[f] && !loadedFonts.has(f)){
+    loadedFonts.add(f);
+    const l = document.createElement('link'); l.rel = 'stylesheet';
+    l.href = `https://fonts.googleapis.com/css2?family=${FONT_URL[f]}&display=swap`;
+    l.onload = () => { try{ document.fonts.load(`${settings.weight} 40px "${f}"`, 'ğüşıöçĞÜŞİÖÇ').then(() => tokens.length && show(idx)); }catch(e){} };
+    document.head.appendChild(l);
+  }
+  if (tokens.length) show(idx);
+}
+$('font').value = settings.font; $('font').onchange = e => { settings.font = e.target.value; saveSettings(); applyFont(); };
+$('pivot').value = settings.pivot; $('pivot').onchange = e => { settings.pivot = e.target.value; saveSettings(); applyFont(); };
+$('weight').value = settings.weight; $('weight').onchange = e => { settings.weight = e.target.value; saveSettings(); applyFont(); };
+$('theme').value = settings.theme; $('theme').onchange = e => { settings.theme = e.target.value; applyTheme(); saveSettings(); };
+['smartPause','rampUp','autoSpeed','holdMode'].forEach(k => { $(k).checked = settings[k]; $(k).onchange = e => { settings[k] = e.target.checked; saveSettings(); updateMeta(); if (k==='holdMode' && !playing) $('hint').textContent = settings.holdMode ? 'Okumak için ekrana basılı tut' : idleHint(idx>0); }; });
+
+/* ---------- documents ---------- */
+function loadText(text, title, key, posOverride){
+  const clean = text.replace(HYPH_BREAK,'$1$2').replace(/[\u00ad\u200b]/g,'');
+  tokens = tokenize(clean);
+  if (!tokens.length){ toast('Bu belgede okunabilir metin bulunamadı'); return false; }
+  if (playing) pause();
+  docKey = key || hashStr(clean);
+  $('docTitle').textContent = title;
+  const pos = posOverride != null ? posOverride : (store.get('ho.pos', {})[docKey] || 0);
+  idx = Math.min(pos, tokens.length-1);
+  renderPages();
+  show(idx); renderContext(); updateMeta();
+  $('playBtn').textContent = idx > 0 ? '▶ Devam' : '▶ Başlat';
+  $('hint').hidden = false; $('hint').textContent = idx > 0 ? `Kaldığın yerden devam: %${Math.round(idx/tokens.length*100)}` : (settings.holdMode ? 'Okumak için ekrana basılı tut' : idleHint(false));
+  return true;
+}
+function savePos(){ const all = store.get('ho.pos', {}); all[docKey] = idx; store.set('ho.pos', all); if (currentBookId) patchBook(currentBookId, {pos: idx, lastRead: Date.now()}); }
+
+async function parseFile(file){
+  const name = file.name, ext = name.split('.').pop().toLowerCase();
+  let text = '', author = '', title = name.replace(/\.[^.]+$/,'').replace(/[_]+/g,' '), cover = null, pdfBuf = null;
+  {
+    if (!file.size) throw new Error('dosya boş geldi. Dosyayı önce Dosyalar uygulamasına kaydedip oradan seç');
+    if (ext === 'epub'){
+      const r = await parseEpub(await file.arrayBuffer());
+      text = r.text; author = r.author || ''; title = r.title || title; cover = r.cover;
+    } else if (ext === 'pdf'){
+      if (!window.pdfjsLib) throw new Error('PDF okuyucu yüklenemedi');
+      const buf = await file.arrayBuffer();
+      pdfBuf = buf.slice(0);
+      const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+      try{ const md = await pdf.getMetadata(); if (md && md.info){ if (md.info.Title && md.info.Title.trim().length > 2) title = md.info.Title.trim(); if (md.info.Author) author = md.info.Author.trim(); } }catch(e){}
+      cover = await renderPdfCover(pdf);
+      const pages = [];
+      for (let p=1;p<=pdf.numPages;p++){
+        const page = await pdf.getPage(p), tc = await page.getTextContent();
+        let line = '', out = [], lastY = null;
+        for (const it of tc.items){
+          const y = it.transform ? Math.round(it.transform[5]) : lastY;
+          if (lastY !== null && y !== lastY && Math.abs(y-lastY) > 2){ out.push(line); line = ''; }
+          line += it.str; if (it.hasEOL){ out.push(line); line=''; }
+          lastY = y;
+        }
+        out.push(line);
+        // join lines; blank-ish breaks become paragraphs
+        pages.push(joinLines(out));
+        if (p % 10 === 0) toast(`${name}: ${p}/${pdf.numPages} sayfa`, 60000);
+      }
+      text = pages.join('\f');
+      pdf.destroy && pdf.destroy();
+    } else if (ext === 'docx'){
+      if (!window.mammoth) throw new Error('Word okuyucu yüklenemedi');
+      const r = await mammoth.extractRawText({arrayBuffer: await file.arrayBuffer()});
+      text = r.value;
+    } else if (ext === 'html' || ext === 'htm'){
+      const doc = new DOMParser().parseFromString(await file.text(), 'text/html');
+      doc.querySelectorAll('script,style,nav,header,footer').forEach(e=>e.remove());
+      doc.querySelectorAll('p,div,h1,h2,h3,h4,li,br,section,article').forEach(e=>e.after('\n\n'));
+      text = doc.body ? doc.body.textContent : '';
+    } else if (ext === 'srt'){
+      text = (await file.text()).replace(/^\d+\s*$/gm,'').replace(/^\d\d:\d\d.*$/gm,'');
+    } else if (ext === 'rtf'){
+      text = (await file.text()).replace(/\\par[d]?/g,'\n\n').replace(/\{\\[^{}]*\}|\\[a-z]+-?\d* ?|[{}]/gi,'');
+    } else {
+      text = await file.text();
+      if (ext === 'md') text = text.replace(/[#*_`>]+/g,'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1');
+    }
+  }
+  return {text, title, author, cover, pdfBuf, type: ext};
+}
+
+$('fileIn').addEventListener('change', e => { const f = [...e.target.files]; if (f.length) importFiles(f, true); e.target.value=''; });
+$('libIn').addEventListener('change', e => { const f = [...e.target.files]; if (f.length) importFiles(f, false); e.target.value=''; });
+let dragDepth = 0;
+addEventListener('dragenter', e => { if ([...e.dataTransfer.types].includes('Files')){ dragDepth++; $('drop').hidden = false; } });
+addEventListener('dragleave', () => { if (--dragDepth <= 0){ dragDepth = 0; $('drop').hidden = true; } });
+addEventListener('dragover', e => e.preventDefault());
+addEventListener('drop', e => { e.preventDefault(); dragDepth = 0; $('drop').hidden = true; const f = [...e.dataTransfer.files]; if (f.length) importFiles(f, view === 'reader' && f.length === 1); });
+
+$('pasteBtn').onclick = () => { if (playing) pause(); $('modal').hidden = false; $('pasteArea').focus(); };
+$('cancelPaste').onclick = () => { $('modal').hidden = true; };
+$('okPaste').onclick = () => {
+  const t = $('pasteArea').value.trim(); if (!t) { toast('Önce metin yapıştır'); return; }
+  const title = t.split(/\s+/).slice(0,6).join(' ') + '…';
+  $('modal').hidden = true; $('pasteArea').value='';
+  addBook({text: t, title, author: 'Yapıştırılan metin', cover: null, pdfBuf: null, type: 'txt'}, true).then(() => play());
+};
+$('modal').addEventListener('click', e => { if (e.target.id === 'modal') $('modal').hidden = true; });
+
+/* ---------- interaction ---------- */
+/* stage gestures: tap = play/pause, swipe left/right = forward/back, swipe up/down = speed, optional hold-to-read */
+const isTouch = matchMedia('(hover:none),(pointer:coarse)').matches;
+let g = null;
+$('stage').addEventListener('pointerdown', e => {
+  if (e.target.closest('.fbar,.fclose')) return;
+  g = {x:e.clientX, y:e.clientY, t:Date.now(), id:e.pointerId};
+  try{ $('stage').setPointerCapture(e.pointerId); }catch(_){}
+  if (settings.holdMode) play();
+});
+$('stage').addEventListener('pointerup', e => {
+  if (!g || e.pointerId !== g.id) return;
+  const dx = e.clientX - g.x, dy = e.clientY - g.y, adx = Math.abs(dx), ady = Math.abs(dy);
+  g = null;
+  if (adx > 45 && adx > ady){ dx < 0 ? nextSentence() : prevSentence(); toast(dx < 0 ? 'Sonraki cümle' : 'Önceki cümle', 800); if (settings.holdMode) pause(); return; }
+  if (ady > 45){ setWpm(settings.wpm + (dy < 0 ? 25 : -25)); toast(`${settings.wpm} k/dk`, 900); if (settings.holdMode) pause(); return; }
+  if (settings.holdMode) pause(); else toggle();
+});
+$('stage').addEventListener('pointercancel', () => { g = null; if (settings.holdMode && playing) pause(); });
+$('stage').addEventListener('contextmenu', e => e.preventDefault());
+$('fbar').addEventListener('click', e => {
+  const a = e.target.closest('button'); if (!a) return; e.stopPropagation();
+  ({back:prevSentence, next:nextSentence, slow:()=>setWpm(settings.wpm-25), fast:()=>setWpm(settings.wpm+25)})[a.dataset.a]();
+});
+$('fclose').addEventListener('click', e => { e.stopPropagation(); toggleFocus(); });
+function idleHint(resume){
+  if (isTouch) return resume ? 'Dokun: devam · Kaydır ←→: cümle · ↑↓: hız' : 'Dokun: başlat · Kaydır ←→: cümle · ↑↓: hız';
+  return resume ? 'Devam etmek için tıkla veya boşluk tuşuna bas' : 'Başlatmak için tıkla veya boşluk tuşuna bas';
+}
+if (settings.holdMode) $('hint').textContent = 'Okumak için ekrana basılı tut';
+$('playBtn').onclick = toggle;
+$('back10').onclick = () => jump(idx-10);
+$('fwd10').onclick = () => jump(idx+10);
+$('backSent').onclick = prevSentence;
+$('fwdSent').onclick = nextSentence;
+ctx.addEventListener('click', e => { const i = e.target.dataset && e.target.dataset.i; if (i != null) jump(+i); });
+
+function seekFrom(e){ const r = $('progress').getBoundingClientRect(); const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left; jump(Math.round(Math.max(0,Math.min(1,x/r.width)) * (tokens.length-1))); }
+let seeking = false;
+$('progress').addEventListener('pointerdown', e => { seeking = true; $('progress').setPointerCapture(e.pointerId); seekFrom(e); });
+$('progress').addEventListener('pointermove', e => { if (seeking) seekFrom(e); });
+$('progress').addEventListener('pointerup', () => { seeking = false; });
+
+function toggleFocus(){
+  const on = document.body.classList.toggle('focus-mode');
+  $('focusBtn').textContent = on ? 'Odaktan çık' : 'Odak modu';
+  if (tokens.length) show(idx);
+  document.documentElement.style.overflow = on ? 'hidden' : '';
+  try{
+    if (on && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+    else if (!on && document.fullscreenElement) document.exitFullscreen().catch(()=>{});
+  }catch(e){}
+}
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && document.body.classList.contains('focus-mode')) toggleFocus(); });
+$('focusBtn').onclick = toggleFocus;
+
+addEventListener('keydown', e => {
+  if (view !== 'reader' || !$('modal').hidden || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && e.target.type !== 'range' && e.target.type !== 'checkbox') return;
+  const k = e.key;
+  if (k === ' ' ){ e.preventDefault(); toggle(); }
+  else if (k === 'ArrowLeft'){ e.preventDefault(); e.shiftKey ? prevSentence() : jump(idx-10); }
+  else if (k === 'ArrowRight'){ e.preventDefault(); e.shiftKey ? nextSentence() : jump(idx+10); }
+  else if (k === 'ArrowUp'){ e.preventDefault(); setWpm(settings.wpm+25); toast(`${settings.wpm} k/dk`, 900); }
+  else if (k === 'ArrowDown'){ e.preventDefault(); setWpm(settings.wpm-25); toast(`${settings.wpm} k/dk`, 900); }
+  else if (k === 'f' || k === 'F'){ toggleFocus(); }
+  else if (k === 'Escape' && document.body.classList.contains('focus-mode')){ toggleFocus(); }
+  else if (k === 'r' || k === 'R'){ jump(0); }
+});
+document.addEventListener('visibilitychange', () => { if (document.hidden && playing && !audioActive()) pause(); });
+
+/* ---------- read aloud (device text-to-speech) ---------- */
+const synth = window.speechSynthesis || null;
+let voices = [], speakGen = 0, estTimer = null;
+function audioActive(){ return !!(settings.audio && synth); }
+function stopSpeech(){ speakGen++; clearTimeout(estTimer); try{ synth && synth.cancel(); }catch(e){} }
+function loadVoices(){
+  if (!synth) return;
+  voices = synth.getVoices();
+  const sel = $('voice'); sel.replaceChildren();
+  const tr = voices.filter(v => /^tr/i.test(v.lang)), other = voices.filter(v => !/^tr/i.test(v.lang));
+  const group = (label, list) => { if (!list.length) return; const og = document.createElement('optgroup'); og.label = label;
+    list.forEach(v => { const o = document.createElement('option'); o.value = v.voiceURI; o.textContent = `${v.name} (${v.lang})`; og.appendChild(o); }); sel.appendChild(og); };
+  group('Türkçe', tr); group('Diğer diller', other);
+  if (settings.voice && voices.some(v => v.voiceURI === settings.voice)) sel.value = settings.voice;
+  else if (tr[0]) sel.value = tr[0].voiceURI;
+  const note = $('audioNote');
+  if (voices.length && !tr.length){ note.hidden = !settings.audio; note.textContent = 'Bu cihazda Türkçe ses bulunamadı. Telefon veya bilgisayar ayarlarından (Metin okuma / Konuşma) Türkçe ses paketini indirebilirsin.'; }
+  else note.hidden = true;
+}
+if (synth){ loadVoices(); try{ synth.addEventListener('voiceschanged', loadVoices); }catch(e){ synth.onvoiceschanged = loadVoices; } }
+else { $('audioRow').hidden = true; }
+
+function speakFrom(a){
+  const gen = ++speakGen;
+  if (a >= tokens.length){ idx = tokens.length-1; pause(); toast('Metnin sonuna geldin'); return; }
+  let b = a; while (b < tokens.length-1 && !tokens[b].sent && !tokens[b].para && b-a < 30) b++;
+  b++;
+  const offs = []; let text = '';
+  for (let i=a;i<b;i++){ offs.push(text.length); text += tokens[i].w + ' '; }
+  const u = new SpeechSynthesisUtterance(text.trim());
+  const v = voices.find(x => x.voiceURI === $('voice').value);
+  if (v){ u.voice = v; u.lang = v.lang; } else u.lang = 'tr-TR';
+  u.rate = settings.rate;
+  let gotBoundary = false;
+  const setWord = k => {
+    if (gen !== speakGen) return;
+    idx = Math.min(a+k, b-1); show(idx);
+    if (!$('paneText').hidden) lightContext();
+    if (++ctxTick % 8 === 0) updatePageBar();
+  };
+  u.onboundary = e => {
+    if (e.name && e.name !== 'word') return;
+    gotBoundary = true; clearTimeout(estTimer);
+    let k = 0; while (k+1 < offs.length && offs[k+1] <= e.charIndex) k++;
+    setWord(k);
+  };
+  u.onstart = () => {
+    // some voices send no word events: move the words along at the voice's pace instead
+    let k = 0; const per = 60000 / (165 * settings.rate);
+    const tick = () => { if (gotBoundary || gen !== speakGen) return; setWord(k); k++; if (k < b-a) estTimer = setTimeout(tick, per * (1 + Math.max(0, tokens[a+k-1].w.length-7) * 0.06)); };
+    tick();
+  };
+  u.onend = () => { clearTimeout(estTimer); if (gen !== speakGen || !playing) return; sessionWords += b-a; idx = b-1; savePos(); speakFrom(b); };
+  u.onerror = e => { clearTimeout(estTimer); if (gen !== speakGen || e.error === 'interrupted' || e.error === 'canceled') return; pause(); toast('Sesli okuma durdu. Başka bir ses seçmeyi dene.', 4000); };
+  setWord(0);
+  if (synth.speaking || synth.pending){ synth.cancel(); setTimeout(() => { if (gen === speakGen) synth.speak(u); }, 80); }
+  else synth.speak(u);
+}
+function applyAudioUI(){
+  const on = audioActive();
+  $('audioOn').checked = settings.audio;
+  $('voice').hidden = !settings.audio; $('rate').hidden = !settings.audio;
+  $('audioRow').classList.toggle('on', on);
+  $('wpm').closest('.speed').classList.toggle('dim', on); $('presets').classList.toggle('dim', on);
+  loadVoices(); updateMeta();
+}
+$('rate').value = String(settings.rate);
+$('audioOn').onchange = e => { const was = playing; if (was) pause(); settings.audio = e.target.checked; saveSettings(); applyAudioUI(); if (was) play(); };
+$('voice').onchange = e => { settings.voice = e.target.value; saveSettings(); if (playing){ stopSpeech(); speakFrom(idx); } };
+$('rate').onchange = e => { settings.rate = +e.target.value; saveSettings(); updateMeta(); if (playing){ stopSpeech(); speakFrom(idx); } };
+applyAudioUI();
+
+let toastT;
+function toast(msg, ms=2200){ const t = $('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(()=>t.hidden=true, ms); }
+
+/* ---------- library storage (IndexedDB, this device only) ---------- */
+let currentBookId = null, view = 'reader';
+const DB = (() => {
+  let dbp;
+  function open(){
+    if (!dbp) dbp = new Promise((res, rej) => {
+      const r = indexedDB.open('hizlioku', 1);
+      r.onupgradeneeded = () => { const db = r.result; db.createObjectStore('meta', {keyPath:'id'}); db.createObjectStore('content', {keyPath:'id'}); };
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    return dbp;
+  }
+  const mem = {meta: new Map(), content: new Map()};
+  let memMode = false;
+  async function getDb(){
+    if (memMode) return null;
+    try{
+      if (!window.indexedDB) throw new Error('no indexedDB');
+      // some iOS versions never answer indexedDB.open: give up after a few seconds
+      return await Promise.race([open(), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))]);
+    }catch(e){ console.warn('Kalıcı depolama yok, oturum belleği kullanılıyor', e); memMode = true; return null; }
+  }
+  async function run(storeName, mode, fn, memFn){
+    const db = await getDb();
+    if (!db) return memFn(mem[storeName]);
+    return new Promise((res, rej) => {
+      let t; try{ t = db.transaction(storeName, mode); }catch(e){ rej(e); return; }
+      let req; try{ req = fn(t.objectStore(storeName)); }catch(e){ rej(e); return; }
+      t.oncomplete = () => res(req ? req.result : undefined); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error);
+    });
+  }
+  return {
+    put: (st, v) => run(st, 'readwrite', s => s.put(v), m => { m.set(v.id, v); return v.id; }),
+    get: (st, id) => run(st, 'readonly', s => s.get(id), m => m.get(id)),
+    del: (st, id) => run(st, 'readwrite', s => s.delete(id), m => m.delete(id)),
+    all: st => run(st, 'readonly', s => s.getAll(), m => [...m.values()]),
+    isMemory: () => memMode
+  };
+})();
+let patchQueue = Promise.resolve();
+function patchBook(id, fields){
+  patchQueue = patchQueue.then(async () => { const m = await DB.get('meta', id); if (m){ Object.assign(m, fields); await DB.put('meta', m); } }).catch(()=>{});
+  return patchQueue;
+}
+
+async function addBook(parsed, openIt, forcedId){
+  const clean = parsed.text.replace(HYPH_BREAK,'$1$2').replace(/[­​]/g,'');
+  const words = clean.split(/\s+/).filter(Boolean).length;
+  if (!words) throw new Error(parsed.type === 'pdf' ? 'metin bulunamadı, taranmış PDF olabilir' : 'içinde okunabilir metin bulunamadı');
+  const id = forcedId || hashStr(clean);
+  const existing = await DB.get('meta', id).catch(() => null);
+  if (!existing){
+    try{ await DB.put('content', {id, text: clean, pdf: parsed.pdfBuf || null}); }
+    catch(e){
+      if (e && /quota/i.test(e.name + e.message)) throw new Error('cihazda yer kalmadı');
+      // storing the original PDF can fail on some phones: keep the text only
+      if (!parsed.pdfBuf) throw new Error('kitap kaydedilemedi (' + (e && (e.name || e.message)) + ')');
+      await DB.put('content', {id, text: clean, pdf: null});
+    }
+    await DB.put('meta', {id, title: parsed.title, author: parsed.author || '', words, pos: store.get('ho.pos', {})[id] || 0,
+      addedAt: Date.now(), lastRead: 0, cover: parsed.cover || null, type: parsed.type, chapters: clean.split('\f').length});
+    try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
+  }
+  if (openIt) await openBook(id);
+  return {id, existed: !!existing};
+}
+
+const APP_VERSION = '11';
+const errLog = [];
+$('ver').textContent = `HızlıOku sürüm ${APP_VERSION}`;
+$('copyErr').onclick = () => { const t = $('libErrText').textContent; navigator.clipboard && navigator.clipboard.writeText(t).then(() => toast('Kopyalandı'), () => { getSelection().selectAllChildren($('libErrText')); toast('Metni seçip kopyala'); }); };
+$('closeErr').onclick = () => { $('libErr').hidden = true; errLog.length = 0; };
+async function importFiles(files, openFirst){
+  let added = 0, skipped = 0, failed = [];
+  errLog.length = 0;
+  for (let i = 0; i < files.length; i++){
+    const f = files[i];
+    toast(files.length > 1 ? `Ekleniyor ${i+1}/${files.length}: ${f.name}` : `${f.name} açılıyor…`, 120000);
+    try{
+      const parsed = await parseFile(f);
+      const r = await addBook(parsed, openFirst && i === 0);
+      r.existed ? skipped++ : added++;
+    }catch(err){
+      failed.push(`${f.name}: ${(err && err.message) || err}`); console.warn(err);
+      errLog.push([`Dosya: ${f.name}`, `Boyut: ${f.size} bayt · Tür: ${f.type || '(yok)'}`, `Hata: ${(err && err.name) || ''} ${(err && err.message) || err}`,
+        `Kalıcı kayıt: ${DB.isMemory() ? 'kapalı' : 'açık'} · EPUB modülü: ${window.JSZip ? 'var' : 'YOK'} · PDF modülü: ${window.pdfjsLib ? 'var' : 'YOK'}`,
+        `Sürüm: ${APP_VERSION} · ${navigator.userAgent}`, (err && err.stack ? String(err.stack).split('\n').slice(0,4).join('\n') : '')].join('\n'));
+    }
+  }
+  await refreshLibrary();
+  if (errLog.length){ $('libErrText').textContent = errLog.join('\n\n'); $('libErr').hidden = false; }
+  const parts = [];
+  if (added) parts.push(`${added} kitap eklendi`);
+  if (skipped) parts.push(`${skipped} kitap zaten kütüphanede`);
+  if (failed.length) parts.push(failed.length === 1 ? `Okunamadı: ${failed[0]}` : `${failed.length} dosya okunamadı. İlki: ${failed[0]}`);
+  if (DB.isMemory() && (added || skipped)) parts.push('Bu tarayıcı kalıcı kayda izin vermiyor, kitaplar sayfa kapanınca silinir');
+  toast(parts.join(' · ') || 'Hazır', failed.length || DB.isMemory() ? 8000 : 3000);
+}
+
+async function openBook(id, quiet){
+  const [m, c] = await Promise.all([DB.get('meta', id), DB.get('content', id)]);
+  if (!m || !c) return false;
+  if (playing) pause();
+  if (currentPdf && currentPdf.destroy) try{ currentPdf.destroy(); }catch(e){}
+  currentPdf = null;
+  if (c.pdf && window.pdfjsLib){ try{ currentPdf = await pdfjsLib.getDocument({data: c.pdf.slice(0)}).promise; }catch(e){ currentPdf = null; } }
+  currentBookId = id;
+  const ok = loadText(c.text, m.title, id, m.pos || 0);
+  if (!ok) return false;
+  $('docTitle').textContent = m.author ? `${m.title} · ${m.author}` : m.title;
+  store.set('ho.last', id);
+  patchBook(id, {lastRead: Date.now()});
+  if (!quiet) setView('reader');
+  return true;
+}
+
+async function removeBook(id){
+  await DB.del('meta', id); await DB.del('content', id);
+  const all = store.get('ho.pos', {}); delete all[id]; store.set('ho.pos', all);
+  if (currentBookId === id){ currentBookId = null; store.set('ho.last', null); }
+  refreshLibrary();
+}
+
+/* ---------- EPUB / covers ---------- */
+function normPath(p){ const out = []; p.split('/').forEach(seg => { if (seg === '..') out.pop(); else if (seg && seg !== '.') out.push(seg); }); return out.join('/'); }
+function htmlToText(html){
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('script,style,nav').forEach(e => e.remove());
+  doc.querySelectorAll('p,div,h1,h2,h3,h4,h5,h6,li,blockquote,section,article,tr,br').forEach(e => e.after('\n\n'));
+  return doc.body ? doc.body.textContent : '';
+}
+async function parseEpub(buf){
+  if (!window.JSZip) throw new Error('EPUB okuyucu yüklenemedi');
+  const head = new Uint8Array(buf, 0, Math.min(4, buf.byteLength));
+  if (!(head[0] === 0x50 && head[1] === 0x4b)) throw new Error('dosya EPUB biçiminde değil veya şifreli (DRM) olabilir');
+  let zip;
+  try{ zip = await JSZip.loadAsync(buf); }catch(e){ throw new Error('EPUB açılamadı, dosya bozuk olabilir'); }
+  const byLower = {}; Object.keys(zip.files).forEach(n => byLower[n.toLowerCase()] = n);
+  const getF = path => zip.file(path) || (byLower[path.toLowerCase()] && zip.file(byLower[path.toLowerCase()])) || null;
+  const xml = s => new DOMParser().parseFromString(s.replace(/^\uFEFF/, ''), 'application/xml');
+  let opfPath = null;
+  const cf = getF('META-INF/container.xml');
+  if (cf){ try{ const rf = xml(await cf.async('text')).getElementsByTagNameNS('*','rootfile')[0]; opfPath = rf && rf.getAttribute('full-path'); }catch(e){} }
+  if (!opfPath || !getF(opfPath)){ const o = zip.file(/\.opf$/i)[0]; opfPath = o ? o.name : null; }
+  const enc = getF('META-INF/encryption.xml');
+  if (enc){
+    // font obfuscation is harmless; encrypted chapters mean store DRM (Adobe, Apple, Kobo…)
+    const ex = await enc.async('text');
+    const refs = [...ex.matchAll(/URI="([^"]+)"/g)].map(m => m[1]).filter(u => !/^http/.test(u));
+    if (refs.some(u => /\.x?html?$/i.test(u))) throw new Error('kitap DRM ile korunuyor, mağazanın kendi uygulamasında okunabilir');
+  }
+  if (!opfPath){
+    // no package file: read every HTML page in name order
+    const names = Object.keys(zip.files).filter(n => /\.x?html?$/i.test(n)).sort((a,b) => a.localeCompare(b, undefined, {numeric:true}));
+    const parts = [];
+    for (const n of names){ const t = htmlToText(await zip.file(n).async('text')).trim(); if (t.split(/\s+/).length > 3) parts.push(t); }
+    return {text: parts.join('\f'), title: '', author: '', cover: null};
+  }
+  const base = opfPath.includes('/') ? opfPath.slice(0, opfPath.lastIndexOf('/') + 1) : '';
+  const opf = xml(await getF(opfPath).async('text'));
+  const first = tag => { const el = opf.getElementsByTagNameNS('*', tag)[0]; return el ? el.textContent.trim() : ''; };
+  const items = {};
+  [...opf.getElementsByTagNameNS('*','item')].forEach(it => items[it.getAttribute('id')] = {href: it.getAttribute('href'), type: it.getAttribute('media-type') || '', props: it.getAttribute('properties') || ''});
+  const resolve = href => { let h = (href || '').split('#')[0]; try{ h = decodeURIComponent(h); }catch(e){} return normPath(base + h); };
+  const chapters = [];
+  for (const ref of opf.getElementsByTagNameNS('*','itemref')){
+    const it = items[ref.getAttribute('idref')]; if (!it) continue;
+    const f = getF(resolve(it.href)); if (!f) continue;
+    const t = htmlToText(await f.async('text')).trim();
+    if (t.split(/\s+/).length > 3) chapters.push(t);
+  }
+  let ci = Object.values(items).find(i => /cover-image/.test(i.props));
+  if (!ci){ const mt = [...opf.getElementsByTagNameNS('*','meta')].find(x => x.getAttribute('name') === 'cover'); if (mt) ci = items[mt.getAttribute('content')]; }
+  if (!ci) ci = Object.values(items).find(i => /image/.test(i.type) && /cover/i.test(i.href));
+  let cover = null;
+  if (ci){ const f = getF(resolve(ci.href)); if (f) try{ cover = await shrinkImage(await f.async('blob')); }catch(e){} }
+  return {text: chapters.join('\f'), title: first('title'), author: first('creator'), cover};
+}
+async function shrinkImage(blob){
+  try{
+    const url = URL.createObjectURL(blob);
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const w = 260, h = Math.round(img.naturalHeight * w / img.naturalWidth);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').drawImage(img, 0, 0, w, h); URL.revokeObjectURL(url);
+    return c.toDataURL('image/jpeg', 0.82);
+  }catch(e){ return null; }
+}
+async function renderPdfCover(pdf){
+  try{
+    const page = await pdf.getPage(1); const v1 = page.getViewport({scale:1});
+    const vp = page.getViewport({scale: 260 / v1.width});
+    const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height;
+    const g2 = c.getContext('2d'); g2.fillStyle = '#fff'; g2.fillRect(0,0,c.width,c.height);
+    await page.render({canvasContext: g2, viewport: vp}).promise;
+    return c.toDataURL('image/jpeg', 0.8);
+  }catch(e){ return null; }
+}
+
+/* ---------- library view ---------- */
+function setView(v){
+  view = v;
+  if (v === 'library' && playing) pause();
+  $('readerView').hidden = v !== 'reader'; $('readerActions').hidden = v !== 'reader';
+  $('libraryView').hidden = v !== 'library';
+  $('docTitle').hidden = v !== 'reader';
+  $('vReader').setAttribute('aria-pressed', v === 'reader'); $('vLib').setAttribute('aria-pressed', v === 'library');
+  if (v === 'library') refreshLibrary();
+  else if (tokens.length){ show(idx); renderPages(); updateMeta(); }
+}
+$('vReader').onclick = () => setView('reader');
+$('vLib').onclick = () => setView('library');
+$('libSearch').addEventListener('input', () => refreshLibrary());
+$('libSort').value = store.get('ho.libSort', 'recent');
+$('libSort').onchange = e => { store.set('ho.libSort', e.target.value); refreshLibrary(); };
+
+function hueOf(s){ let h = 0; for (const ch of s) h = (h * 31 + ch.codePointAt(0)) % 360; return h; }
+function fmtDur(min){ if (min < 1) return '<1 dk'; const h = Math.floor(min/60), m = Math.round(min%60); return h ? `${h} sa ${m} dk` : `${m} dk`; }
+async function refreshLibrary(){
+  let books = [];
+  try{ books = await DB.all('meta'); }catch(e){}
+  $('libCount').textContent = books.length ? books.length : '';
+  if (view !== 'library') return;
+  const q = $('libSearch').value.trim().toLocaleLowerCase('tr');
+  const sort = $('libSort').value;
+  const shown = books.filter(b => !q || (b.title + ' ' + b.author).toLocaleLowerCase('tr').includes(q));
+  const prog = b => b.words ? b.pos / b.words : 0;
+  const cmp = {
+    recent: (a,b) => (b.lastRead||b.addedAt) - (a.lastRead||a.addedAt),
+    added: (a,b) => b.addedAt - a.addedAt,
+    title: (a,b) => a.title.localeCompare(b.title, 'tr'),
+    author: (a,b) => (a.author||'~').localeCompare(b.author||'~', 'tr') || a.title.localeCompare(b.title, 'tr'),
+    progress: (a,b) => prog(b) - prog(a)
+  }[sort];
+  shown.sort(cmp);
+  const totalWords = books.reduce((s,b) => s + (b.words||0), 0);
+  const finished = books.filter(b => prog(b) > 0.98).length;
+  $('libSummary').textContent = books.length
+    ? `${books.length} kitap · ${totalWords.toLocaleString('tr-TR')} kelime · ${finished} tamamlandı · ${DB.isMemory() ? 'kalıcı kayıt kapalı, sayfa kapanınca silinir' : 'bu cihazda saklanıyor'}`
+    : 'Kitaplar bu cihazda saklanır.';
+  $('libEmpty').hidden = books.length > 0;
+  const frag = document.createDocumentFragment();
+  for (const b of shown){
+    const p = prog(b);
+    const card = document.createElement('article'); card.className = 'book' + (b.id === currentBookId ? ' reading' : '');
+    const cov = document.createElement('button'); cov.type = 'button'; cov.className = 'cover'; cov.setAttribute('aria-label', `${b.title} kitabını oku`);
+    if (b.cover){ const im = document.createElement('img'); im.src = b.cover; im.alt = ''; cov.appendChild(im); }
+    else {
+      const gdiv = document.createElement('div'); gdiv.className = 'gen'; gdiv.style.setProperty('--h', hueOf(b.title));
+      const t = document.createElement('b'); t.textContent = b.title;
+      const a = document.createElement('span'); a.textContent = b.author || b.type.toUpperCase();
+      gdiv.append(t, a); cov.appendChild(gdiv);
+    }
+    if (p > 0.98){ const bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = 'Bitti'; cov.appendChild(bd); }
+    else if (b.id === currentBookId){ const bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = 'Okunuyor'; cov.appendChild(bd); }
+    cov.onclick = () => openBook(b.id).then(ok => { if (!ok) toast('Kitap açılamadı'); });
+    const info = document.createElement('div'); info.className = 'binfo';
+    const tt = document.createElement('b'); tt.textContent = b.title;
+    const au = document.createElement('span'); au.className = 'au'; au.textContent = b.author || '—';
+    info.append(tt, au);
+    const bar = document.createElement('div'); bar.className = 'bprog'; const bi = document.createElement('i'); bi.style.width = Math.round(p*100) + '%'; bar.appendChild(bi);
+    const meta = document.createElement('div'); meta.className = 'bmeta';
+    const left = document.createElement('span');
+    left.textContent = p > 0 ? `%${Math.round(p*100)} · ${fmtDur((b.words - b.pos) / settings.wpm)} kaldı` : `${b.words.toLocaleString('tr-TR')} k · ${fmtDur(b.words / settings.wpm)}`;
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'bdel'; del.textContent = 'Sil';
+    let armed = null;
+    del.onclick = () => {
+      if (!del.classList.contains('confirm')){ del.classList.add('confirm'); del.textContent = 'Emin misin?'; armed = setTimeout(() => { del.classList.remove('confirm'); del.textContent = 'Sil'; }, 3500); return; }
+      clearTimeout(armed); removeBook(b.id).then(() => toast(`"${b.title}" silindi`));
+    };
+    meta.append(left, del);
+    card.append(cov, info, bar, meta);
+    frag.appendChild(card);
+  }
+  $('shelf').replaceChildren(frag);
+  if (books.length && !shown.length){ const n = document.createElement('p'); n.style.color = 'var(--muted)'; n.textContent = 'Aramana uyan kitap yok.'; $('shelf').appendChild(n); }
+}
+
+/* ---------- boot ---------- */
+applyTheme(); applySize(); applyFont(); setWpm(settings.wpm);
+(async () => {
+  const last = store.get('ho.last', null);
+  try{
+    const legacy = store.get('ho.doc', null);
+    if (legacy && legacy.text){ await addBook({text: legacy.text, title: legacy.title, author:'', cover:null, pdfBuf:null, type:'txt'}, false, legacy.key); try{ localStorage.removeItem('ho.doc'); }catch(e){} }
+  }catch(e){}
+  let opened = false;
+  if (last){ try{ opened = await openBook(last, true); }catch(e){} }
+  if (!opened) loadText(SAMPLE, 'Örnek metin: Hızlı okuma nasıl çalışır', 'sample');
+  refreshLibrary();
+})();
+})();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+</script>
+</body>
+</html>

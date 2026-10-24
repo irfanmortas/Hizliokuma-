@@ -1,0 +1,17 @@
+{
+  "name": "HızlıOku",
+  "short_name": "HızlıOku",
+  "description": "Kelime kelime hızlı okuma, kütüphane ve sesli okuma.",
+  "lang": "tr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#101318",
+  "theme_color": "#16191F",
+  "icons": [
+    {"src": "icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "file_handlers": [{"action": "./", "accept": {"application/epub+zip": [".epub"], "application/pdf": [".pdf"]}}]
+}

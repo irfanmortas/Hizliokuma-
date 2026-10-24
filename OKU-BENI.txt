@@ -1,0 +1,23 @@
+HızlıOku — telefona uygulama olarak kurulum
+============================================
+
+Bu klasör, HızlıOku'nun telefona kurulabilen (ana ekranda simgesi olan,
+tam ekran açılan ve internetsiz çalışan) halidir.
+
+Uygulamanın çalışması için bu klasörün bir web adresinde (https) yayında
+olması gerekir. En kolay iki yol:
+
+1) Kendi siten (ör. inoatech.com.tr)
+   Klasörün içindeki tüm dosyaları sunucuda "hizlioku" adlı bir klasöre yükle.
+   Adres: https://www.inoatech.com.tr/hizlioku/
+
+2) Ücretsiz: GitHub Pages
+   github.com'da yeni bir depo aç, bu dosyaları yükle,
+   Settings > Pages > "Deploy from a branch" > main seç.
+   Adres: https://KULLANICIADIN.github.io/DEPOADI/
+
+Telefona kurmak:
+- iPhone: Safari ile adresi aç > Paylaş > "Ana Ekrana Ekle"
+- Android: Chrome ile adresi aç > menü (⋮) > "Uygulamayı yükle" / "Ana ekrana ekle"
+
+Not: Kitaplar her telefonda o telefonun içinde saklanır.
